@@ -1,0 +1,5 @@
+streamlit==1.57.0
+pandas==3.0.3
+requests==2.34.2
+Pillow==12.2.0
+openpyxl>=3.1.0
