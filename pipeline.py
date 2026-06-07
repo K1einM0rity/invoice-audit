@@ -77,15 +77,22 @@ def process_invoice(image_path: str, seen_set: set, history_set: set) -> dict:
             "上传的图片不像是一张发票（关键字段缺失过多），请确认上传的是发票图片。",
             severity=Severity.WARNING,
         )
-
-    # ===== 第二步：规则校验 =====
+    # ===== 1.5步：QR码解码与注入 =====
     try:
-        results = validate_all(fields, seen_set, history_set)
-    except Exception as e:
-        return _build_error_report(
-            "规则校验",
-            f"规则校验阶段出错：{str(e)}",
-        )
+        from qr_decoder import decode_qr_from_image
+        qr_fields = decode_qr_from_image(image_path)
+        if qr_fields:
+            fields["_qr_fields"] = qr_fields
+    except Exception:
+        pass  # QR解码失败不影响主流程
+        # ===== 第二步：规则校验 =====
+        try:
+            results = validate_all(fields, seen_set, history_set)
+        except Exception as e:
+            return _build_error_report(
+                "规则校验",
+                f"规则校验阶段出错：{str(e)}",
+            )
 
     # ===== 第三步：审计建议 =====
     try:
@@ -97,7 +104,7 @@ def process_invoice(image_path: str, seen_set: set, history_set: set) -> dict:
             opinion = f"审计建议生成失败，以下为规则异常摘要：{'；'.join(issues)}"
         else:
             opinion = "审计建议生成失败，但所有规则均通过。"
-    clean_fields = {k: v for k, v in fields.items() if not k.startswith("_")}
+    clean_fields = {k: v for k, v in fields.items() if not k.startswith("_") or k == "_confidence"}
     return {
         'fields': clean_fields,
         'results': results,

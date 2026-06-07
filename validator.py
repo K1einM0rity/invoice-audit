@@ -1,7 +1,7 @@
 """
 规则引擎
 """
-
+from qr_decoder import cross_validate_qr
 from enum import Enum
 from dataclasses import dataclass
 import re
@@ -381,7 +381,92 @@ def check_tax_rate_consistency(fields: dict) -> RuleResult:
         message=f"税率 {actual_rate:.2%} 与标准税率 {closest:.0%} 一致",
     )
 
+#FR-D10
+def check_field_confidence(fields: dict) -> RuleResult:
+    """
+    检查关键字段的 OCR 识别置信度，低置信度字段提示用户人工复核。
+    """
+    confidences = fields.get("_confidence", {})
+    if not confidences:
+        return RuleResult(
+            rule_name="字段置信度",
+            passed=True,
+            severity=Severity.PASS,
+            message="置信度数据不可用（模型未返回），跳过检查",
+        )
 
+    # 关键字段及其容忍度：某些字段天生难识别（如手写），阈值放宽
+    critical_fields = {
+        "发票号码": 3,
+        "发票代码": 3,
+        "开票日期": 3,
+        "金额": 3,
+        "税额": 3,
+        "价税合计": 3,
+        "购买方名称": 2,
+        "购买方税号": 2,
+        "销售方名称": 2,
+        "销售方税号": 2,
+    }
+
+    low_conf = []
+    for field, threshold in critical_fields.items():
+        conf = confidences.get(field)
+        val = fields.get(field)
+        # 有值但置信度低于阈值 → 可能是 OCR 错误
+        if val is not None and conf is not None and conf < threshold:
+            low_conf.append(f"{field}(置信度{conf}/5)")
+
+    if low_conf:
+        return RuleResult(
+            rule_name="字段置信度",
+            passed=False,
+            severity=Severity.WARNING,
+            message=f"以下字段识别置信度较低，建议人工复核：{'、'.join(low_conf)}",
+        )
+
+    return RuleResult(
+        rule_name="字段置信度",
+        passed=True,
+        severity=Severity.PASS,
+        message="关键字段识别置信度均在可接受范围内",
+    )
+
+#FR-D11
+def check_qr_cross_validation(fields: dict) -> RuleResult:
+    """
+    如果存在 QR 码解码数据，与 AI 提取结果进行交叉比对。
+    仅在 QR 码解码成功时才执行（qr_decoder 返回非空时）。
+    """
+    qr_fields = fields.get("_qr_fields")
+    if not qr_fields:
+        return RuleResult(
+            rule_name="QR码交叉验证",
+            passed=True,
+            severity=Severity.PASS,
+            message="未检测到可解码的QR码，跳过交叉验证",
+        )
+
+    mismatches = cross_validate_qr(fields, qr_fields)  # 需要 import
+
+    if not mismatches:
+        return RuleResult(
+            rule_name="QR码交叉验证",
+            passed=True,
+            severity=Severity.PASS,
+            message="QR码数据与AI识别结果一致",
+        )
+
+    detail = "；".join(
+        f"{field}: AI={ai_val}，QR={qr_val}"
+        for field, ai_val, qr_val in mismatches
+    )
+    return RuleResult(
+        rule_name="QR码交叉验证",
+        passed=False,
+        severity=Severity.ERROR,
+        message=f"QR码与AI识别结果不一致（共{len(mismatches)}项）：{detail}。QR码数据通常更可靠，建议以QR码为准",
+    )
 #规则链汇总函数
 
 def validate_all(fields:dict,seen_set:set,history_set:set)->list:
@@ -395,4 +480,5 @@ def validate_all(fields:dict,seen_set:set,history_set:set)->list:
     results.append(check_invoice_code(fields))
     results.append(cross_validate_invoice_type(fields))
     results.append(check_tax_rate_consistency(fields))
+    results.append(check_field_confidence(fields))
     return results
