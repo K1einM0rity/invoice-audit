@@ -154,6 +154,6 @@ if st.session_state.all_results:
         st.session_state.all_results = []
         st.session_state.seen_numbers = set()
         st.session_state.upload_key += 1
-        for f in glob.glob("temp_*.jpg"):
-            os.remove(f)
-        st.rerun()
+        for f in os.listdir():
+            if f.startswith("temp_") and os.path.isfile(f):
+                os.remove(f)

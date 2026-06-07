@@ -49,7 +49,7 @@ def _is_likely_invoice(fields: dict) -> bool:
     ]
     # 至少有两个关键字段有值，才认为可能是发票
     filled = sum(1 for v in key_fields if v is not None)
-    return filled >= 2
+    return filled >= 4
 
 def _parse_json_safe(content: str) -> dict:
     """带兜底策略的 JSON 解析器"""
@@ -95,18 +95,6 @@ def extract_from_image(image_path: str) -> dict:
     # ===== 阶段1：打开并验证图片 =====
     try:
         img = Image.open(image_path)
-        img.verify()  # 验证图片完整性（不加载像素，轻量级检查）
-    except (UnidentifiedImageError, OSError, IOError) as e:
-        return {
-            "_parse_error": True,
-            "_error_type": "invalid_image",
-            "_raw": f"无法打开图片文件：{str(e)}",
-        }
-
-    # verify() 之后需要重新打开才能操作
-    try:
-        img = Image.open(image_path)
-        # 压缩大图，节省带宽
         if img.width > 2000:
             ratio = 2000 / img.width
             new_h = int(img.height * ratio)

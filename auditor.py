@@ -62,14 +62,23 @@ def generate_audit_opinion(fields: dict, results: list) -> str:
             "content": prompt,
         }],
     }
-
-    response = requests.post(url, headers=headers, json=body)
-
+    try:
+        response = requests.post(url, headers=headers, json=body)
+    except requests.exceptions.Timeout:
+        issues = [str(r.message) for r in results if not r.passed]
+        return f"审计建议生成失败（API超时）。异常摘要：{'；'.join(issues)}"
+    except requests.exceptions.ConnectionError:
+        issues = [str(r.message) for r in results if not r.passed]
+        return f"审计建议生成失败（网络连接异常）。异常摘要：{'；'.join(issues)}"
+    except requests.exceptions.RequestException as e:
+        issues = [str(r.message) for r in results if not r.passed]
+        return f"审计建议生成失败（请求异常：{str(e)}）。异常摘要：{'；'.join(issues)}"
     if response.status_code != 200:
         issues = [str(r.message) for r in results if not r.passed]
         return f"审计建议生成失败（API状态码{response.status_code}）。异常摘要：{'；'.join(issues)}"
 
     data = response.json()
+    
     if 'choices' in data:
         return data['choices'][0]['message']['content']
 
