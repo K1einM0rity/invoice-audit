@@ -258,7 +258,7 @@ def check_invoice_code(fields:dict)->RuleResult:
             rule_name="发票代码格式",
             passed=False,
             severity=Severity.ERROR,
-            message=f"发票代码'{code}'格式不正确，应为12位数字且首位为0,老发票应为10位数字"
+            message=f"发票代码'{code}'格式不正确，要求10位数字（传统发票）或12位数字且首位为0（电子发票）"
         )
     return RuleResult(
         rule_name="发票代码格式",
@@ -309,6 +309,79 @@ def cross_validate_invoice_type(fields: dict) -> RuleResult:
         message="发票类型与号码长度一致"
     )
 
+#FR-D09
+def check_tax_rate_consistency(fields: dict) -> RuleResult:
+    """
+    校验 税额÷金额 是否接近标准税率。
+    这不是发票真伪验证——官方验真请用 https://inv-veri.chinatax.gov.cn。
+    本规则仅检测 OCR 识别错误或票面计算异常。
+    """
+    amount = fields.get("金额")
+    tax = fields.get("税额")
+
+    if amount is None or tax is None:
+        return RuleResult(
+            rule_name="税率一致性检查",
+            passed=True,
+            severity=Severity.PASS,
+            message="金额或税额缺失，跳过税率一致性检查",
+        )
+
+    try:
+        amount = Decimal(str(amount))
+        tax = Decimal(str(tax))
+    except InvalidOperation:
+        return RuleResult(
+            rule_name="税率一致性检查",
+            passed=False,
+            severity=Severity.WARNING,
+            message="金额或税额包含非数字字符，无法进行税率检查",
+        )
+
+    if amount == 0:
+        return RuleResult(
+            rule_name="税率一致性检查",
+            passed=False,
+            severity=Severity.WARNING,
+            message="金额为0，无法计算税率",
+        )
+
+    actual_rate = tax / amount
+
+    # 标准税率：一般纳税人 13%/9%/6%/0%，小规模/简易计税 5%/3%/1%
+    standard_rates = [
+        Decimal("0.13"),
+        Decimal("0.09"),
+        Decimal("0.06"),
+        Decimal("0.05"),
+        Decimal("0.03"),
+        Decimal("0.01"),
+        Decimal("0"),
+    ]
+
+    # 找最接近的标准税率
+    closest = min(standard_rates, key=lambda r: abs(actual_rate - r))
+    diff = abs(actual_rate - closest)
+
+    if diff > Decimal("0.005"):
+        return RuleResult(
+            rule_name="税率一致性检查",
+            passed=False,
+            severity=Severity.WARNING,
+            message=(
+                f"税率异常：实际 {actual_rate:.2%}，最近标准税率 {closest:.0%}"
+                f"，偏差 {diff:.2%}，可能为 OCR 识别错误或票面数据不一致"
+            ),
+        )
+
+    return RuleResult(
+        rule_name="税率一致性检查",
+        passed=True,
+        severity=Severity.PASS,
+        message=f"税率 {actual_rate:.2%} 与标准税率 {closest:.0%} 一致",
+    )
+
+
 #规则链汇总函数
 
 def validate_all(fields:dict,seen_set:set,history_set:set)->list:
@@ -321,4 +394,5 @@ def validate_all(fields:dict,seen_set:set,history_set:set)->list:
     results.append(check_duplicate(fields, seen_set, history_set))
     results.append(check_invoice_code(fields))
     results.append(cross_validate_invoice_type(fields))
+    results.append(check_tax_rate_consistency(fields))
     return results
