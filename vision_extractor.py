@@ -100,13 +100,19 @@ def extract_from_image(image_path: str) -> dict:
             new_h = int(img.height * ratio)
             img = img.resize((2000, new_h), Image.LANCZOS)
             img.save(image_path)
-    except Exception as e:
+    except (UnidentifiedImageError,OSError,IOError)as e:
         return {
+            "_parse_error": True,
+            "_error_type": "invalid_image",
+            "_raw": f"图片文件无法打开或已损坏：{str(e)}",
+        }
+    except Exception as e:
+        return{
             "_parse_error": True,
             "_error_type": "image_processing",
             "_raw": f"图片处理失败：{str(e)}",
         }
-
+    
     # ===== 阶段2：读取并编码 =====
     try:
         with open(image_path, "rb") as f:
