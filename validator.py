@@ -481,4 +481,5 @@ def validate_all(fields:dict,seen_set:set,history_set:set)->list:
     results.append(cross_validate_invoice_type(fields))
     results.append(check_tax_rate_consistency(fields))
     results.append(check_field_confidence(fields))
+    results.append(check_qr_cross_validation(fields))
     return results

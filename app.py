@@ -4,7 +4,6 @@ import pandas as pd
 from history import load_history, save_history
 from pipeline import process_invoice
 import  os
-# 原来的 import 保持不变，加这一行：
 st.title("智能财务审计助手")
 st.write("欢迎使用，上传发票图片即可开始审计。")
 

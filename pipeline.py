@@ -86,12 +86,12 @@ def process_invoice(image_path: str, seen_set: set, history_set: set) -> dict:
     except Exception:
         pass  # QR解码失败不影响主流程
         # ===== 第二步：规则校验 =====
-        try:
-            results = validate_all(fields, seen_set, history_set)
-        except Exception as e:
-            return _build_error_report(
-                "规则校验",
-                f"规则校验阶段出错：{str(e)}",
+    try:
+        results = validate_all(fields, seen_set, history_set)
+    except Exception as e:
+        return _build_error_report(
+            "规则校验",
+            f"规则校验阶段出错：{str(e)}",
             )
 
     # ===== 第三步：审计建议 =====
