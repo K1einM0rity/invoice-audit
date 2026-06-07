@@ -9,7 +9,9 @@ API_KEY = API
 VISION_URL = URL  # 同一个端点，换成多模态模式
 
 PROMPT_VISION = """你是一个财务发票数据提取器。从发票图片中直接提取关键字段。
-
+## 第一步：判断是否为发票
+如果图片是收据（收据）、付款凭证、合同、白条或其他非税务发票文档，或者判断其不符合任何类型发票的格式，直接返回：
+{"_not_invoice": true, "_reason": "该图片不是发票"}
 ##输出规则(必须严格遵守)
 1.只输出一个纯JSON对象,不要任何解释、问候语、Markdown代码块标记
 2.无法确定的字段值填null,严禁编造。
@@ -43,17 +45,25 @@ def _is_likely_invoice(fields: dict) -> bool:
     快速判断提取结果是否像一张发票。
     如果发票号码、发票类型、金额三者全部为 null，大概率不是发票。
     """
-    key_fields = [
-        fields.get("发票号码"),
+    number = fields.get("发票号码")
+    amount = fields.get("价税合计") or fields.get("金额")
+    if not number:
+        return False
+    number_str = str(number)
+    if not (len(number_str) == 8 or len(number_str) == 20):
+        return False
+    if not amount:
+        return False
+    others = [
+
         fields.get("发票类型"),
-        fields.get("金额"),
-        fields.get("价税合计"),
+        fields.get("开票日期"),
         fields.get("购买方名称"),
         fields.get("销售方名称"),
     ]
     # 至少有两个关键字段有值，才认为可能是发票
-    filled = sum(1 for v in key_fields if v is not None)
-    return filled >= 4
+    filled = sum(1 for v in others if v is not None)
+    return filled >= 2
 
 def _parse_json_safe(content: str) -> dict:
     """带兜底策略的 JSON 解析器"""

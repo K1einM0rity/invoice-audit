@@ -75,7 +75,7 @@ def process_invoice(image_path: str, seen_set: set, history_set: set) -> dict:
         return _build_error_report(
             "发票识别",
             "上传的图片不像是一张发票（关键字段缺失过多），请确认上传的是发票图片。",
-            severity=Severity.WARNING,
+            severity=Severity.ERROR,
         )
     # ===== 1.5步：QR码解码与注入 =====
     try:
@@ -85,7 +85,7 @@ def process_invoice(image_path: str, seen_set: set, history_set: set) -> dict:
             fields["_qr_fields"] = qr_fields
     except Exception:
         pass  # QR解码失败不影响主流程
-        # ===== 第二步：规则校验 =====
+    # ===== 第二步：规则校验 =====
     try:
         results = validate_all(fields, seen_set, history_set)
     except Exception as e:

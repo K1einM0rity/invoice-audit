@@ -3,7 +3,8 @@ from io import BytesIO
 import pandas as pd
 from history import load_history, save_history
 from pipeline import process_invoice
-import  os
+import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 st.title("智能财务审计助手")
 st.write("欢迎使用，上传发票图片即可开始审计。")
 
@@ -31,31 +32,38 @@ if uploaded_files:
         st.rerun()
 
 if st.session_state.is_processing:
-    for file in uploaded_files:
-        with st.spinner(f"正在处理 {file.name}..."):
-            temp_path = f"temp_{file.name}"
-            with open(temp_path, "wb") as f:
-                f.write(file.read())
 
-            
-            report = process_invoice(
-                temp_path,
-                st.session_state.seen_numbers,
-                st.session_state.history_numbers
-            )
-            report['filename'] = file.name
+    seen_set = st.session_state.seen_numbers
+    history_set = st.session_state.history_numbers
+
+    # ⬇ 在主线程预读所有文件，避免子线程碰 Streamlit 对象
+    file_cache = {}
+    for f in uploaded_files:
+        file_cache[f.name] = f.read()
+
+    def process_one(name, data):
+        temp_path = f"temp_{name}"
+        with open(temp_path, "wb") as f:
+            f.write(data)
+        report = process_invoice(temp_path, seen_set, history_set)
+        report['filename'] = name
+        return report
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        futures = {executor.submit(process_one, n, d): n for n, d in file_cache.items()}
+        for future in as_completed(futures):
+            report = future.result()
             st.session_state.all_results.append(report)
 
     st.success(f"全部处理完成，总共 {len(uploaded_files)} 张")
-    seen = st.session_state.seen_numbers
-    save_history(st.session_state.history_numbers | seen)
-    st.session_state.history_numbers = st.session_state.history_numbers | seen 
+    save_history(st.session_state.history_numbers | seen_set)
+    st.session_state.history_numbers = st.session_state.history_numbers | seen_set
     st.session_state.is_processing = False
     st.rerun()
 
 if st.session_state.all_results:
     for report in st.session_state.all_results:
-        with st.expander(f"{'🟢' if not report['has_error'] and not report['has_warning'] else '🟡' if report['has_warning'] else '🔴'} {report['filename']}"):
+        with st.expander(f"{'🔴' if report['has_error'] else '🟡' if report['has_warning'] else '🟢'} {report['filename']}"):
             col_img, col_data = st.columns([1, 1])
             with col_img:
                 st.image(f"temp_{report['filename']}", caption=report['filename'])

@@ -99,7 +99,7 @@ def check_date_logic(fields: dict) -> RuleResult:
         return RuleResult(
             rule_name="开票日期逻辑",
             passed=False,
-            severity=Severity.WARNING,
+            severity=Severity.ERROR,
             message="开票日期缺失，无法校验日期有效性"
         )
     date_str = str(date_str).strip()
@@ -190,7 +190,7 @@ def check_required_fields(fields:dict) ->RuleResult:
         return RuleResult(
             rule_name="必填项缺失",
             passed=False,
-            severity=Severity.WARNING,
+            severity=Severity.ERROR,
             message=f"缺失必填字段：{'、'.join(missing)}"
             )
     return RuleResult(
